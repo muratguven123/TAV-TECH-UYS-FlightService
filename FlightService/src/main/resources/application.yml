@@ -1,8 +1,43 @@
+server:
+  port: 8083
+  ssl:
+    enabled: true
+    bundle: service-mtls
+
 spring:
   application:
     name: FlightService
   config:
     import: optional:configserver:http://config-server:8888
+  ssl:
+    bundle:
+      jks:
+        service-mtls:
+          keystore:
+            location: classpath:certs/keystore.p12
+            password: changeit
+            type: PKCS12
+          truststore:
+            location: classpath:certs/truststore.p12
+            password: changeit
+            type: PKCS12
+          client:
+            auth: need   # mTLS: client sertifikası zorunlu
+
+eureka:
+  client:
+    service-url:
+      defaultZone: https://${EUREKA_HOST:localhost}:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    secure-port-enabled: true
+    secure-port: 8083
+    non-secure-port-enabled: false
+
+app:
+  gateway:
+    secret: ${GATEWAY_SECRET:tav-gateway-internal-secret-change-in-prod}
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -10,17 +45,6 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
     enabled: true
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
-  instance:
-    prefer-ip-address: true
-
-app:
-  gateway:
-    secret: ${GATEWAY_SECRET:tav-gateway-internal-secret-change-in-prod}
 
 management:
   endpoints:
