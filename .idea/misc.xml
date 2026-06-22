@@ -11,6 +11,11 @@
         <option value="$PROJECT_DIR$/FlightService/pom.xml" />
       </list>
     </option>
+    <option name="enabledProfiles">
+      <list>
+        <option value="native" />
+      </list>
+    </option>
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="ms-21" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/out" />

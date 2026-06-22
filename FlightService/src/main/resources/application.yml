@@ -36,7 +36,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "*"
+        spring.json.trusted.packages: "com.tav.uys.events,com.tav.FlightService.events"
         spring.json.value.default.type: com.tav.FlightService.events.ReferenceChangedEvent
 
 eureka:
@@ -49,6 +49,7 @@ eureka:
 app:
   gateway:
     secret: ${GATEWAY_SECRET:tav-gateway-internal-secret-change-in-prod}
+    url: ${GATEWAY_URL:http://localhost:8080}
 
 management:
   endpoints:
@@ -61,4 +62,3 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
-
