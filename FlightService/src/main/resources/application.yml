@@ -55,6 +55,12 @@ app:
   gateway:
     secret: ${GATEWAY_SECRET:tav-gateway-internal-secret-change-in-prod}
     url: ${GATEWAY_URL:http://localhost:8080}
+  reference:
+    base-url: ${REFERENCE_MANAGER_URL:http://localhost:8082}
+    validator: ${REFERENCE_VALIDATOR:caching}   # caching | noop
+  internal-user:
+    username: ${INTERNAL_USER:flight-service-internal}
+    password: ${INTERNAL_PASS:Internal-Sv1!ChangeMe}
 
 management:
   endpoints:

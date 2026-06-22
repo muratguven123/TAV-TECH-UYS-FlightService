@@ -1,8 +1,10 @@
 package com.tav.FlightService.service;
 
+import com.tav.FlightService.common.exception.BusinessException;
 import com.tav.FlightService.domain.Flight;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.dto.FlightResponse;
+import com.tav.FlightService.dto.UpdateFlightRequest;
 import com.tav.FlightService.exception.FlightBusinessException;
 import com.tav.FlightService.exception.FlightConflictException;
 import com.tav.FlightService.exception.ReferenceNotFoundException;
@@ -56,6 +58,27 @@ public class FlightService {
                 "Planlanan varış zamanı, kalkış zamanından sonra olmalıdır."
             );
         }
+    }
+
+    @Transactional
+    public FlightResponse update(Long id, UpdateFlightRequest req) {
+        Flight flight = flightRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("Uçuş bulunamadı: " + id));
+        if (!req.scheduledArrival().isAfter(req.scheduledDeparture())) {
+            throw new BusinessException("Varış zamanı kalkıştan sonra olmalı");
+        }
+        flight.setScheduledDeparture(req.scheduledDeparture());
+        flight.setScheduledArrival(req.scheduledArrival());
+        flight.setFlightType(req.flightType());
+        flight.setFlightDate(req.scheduledDeparture().toLocalDate());
+        return flightMapper.toResponse(flightRepository.save(flight));
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        Flight flight = flightRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("Uçuş bulunamadı: " + id));
+        flightRepository.delete(flight);
     }
 
     public void validateReferences(CreateFlightRequest request) {

@@ -1,22 +1,28 @@
 package com.tav.FlightService.validation;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Primary;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Geçici Noop implementasyon — Aşama 5'e kadar tüm referans doğrulama çağrıları
- * bu sınıf tarafından karşılanır ve her zaman true döner.
- *
- * Gerçek implementasyon hazır olduğunda bu sınıftan @Primary kaldırılır,
- * Redis/REST tabanlı gerçek sınıfa eklenir.
+ * Test / geliştirme ortamı için Noop referans doğrulayıcı.
+ * Etkinleştirmek: app.reference.validator=noop
+ * Varsayılan: caching (CachingReferenceValidator @Primary'dir)
  */
-@Primary
 @Component
+@ConditionalOnProperty(name = "app.reference.validator", havingValue = "noop")
+@Slf4j
 public class NoopReferenceValidator implements ReferenceValidator {
 
-    private static final Logger log = LoggerFactory.getLogger(NoopReferenceValidator.class);
+    @PostConstruct
+    public void warnIfActive() {
+        log.warn("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        log.warn("NoopReferenceValidator AKTİF — referans validasyonu DEVRE DIŞI.");
+        log.warn("Bu sadece test ortamında kullanılmalıdır!");
+        log.warn("Production'da app.reference.validator=noop AYARLAMAYIN.");
+        log.warn("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    }
 
     @Override
     public boolean airlineExists(String code) {

@@ -3,8 +3,10 @@ package com.tav.FlightService.common.exception;
 import com.tav.FlightService.exception.FlightBusinessException;
 import com.tav.FlightService.exception.FlightConflictException;
 import com.tav.FlightService.exception.ReferenceNotFoundException;
+import com.tav.FlightService.exception.ServiceUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
@@ -59,6 +61,29 @@ public class GlobalExceptionHandler {
                 "fields", fieldErrors
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler({ObjectOptimisticLockingFailureException.class,
+                       org.springframework.dao.OptimisticLockingFailureException.class})
+    public ResponseEntity<Map<String, Object>> handleStaleVersion(Exception ex) {
+        Map<String, Object> body = Map.of(
+                "timestamp", Instant.now().toString(),
+                "status", 409,
+                "error", "Uçuş başka bir kullanıcı tarafından güncellendi. Tazeleyip tekrar deneyin.",
+                "code", "STALE_VERSION"
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleServiceUnavailable(ServiceUnavailableException ex) {
+        Map<String, Object> body = Map.of(
+                "timestamp", Instant.now().toString(),
+                "status", 503,
+                "error", ex.getMessage(),
+                "code", "SERVICE_UNAVAILABLE"
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
