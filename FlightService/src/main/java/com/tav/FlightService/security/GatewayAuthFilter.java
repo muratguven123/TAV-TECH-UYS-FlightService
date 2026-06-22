@@ -11,6 +11,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -24,6 +25,21 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
 
     @Value("${app.gateway.secret}")
     private String expectedGatewaySecret;
+
+
+    private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
+    private static final java.util.List<String> SWAGGER_PATHS = java.util.List.of(
+            "/v3/api-docs/**", "/v3/api-docs",
+            "/swagger-ui/**", "/swagger-ui.html",
+            "/webjars/**",
+            "/actuator/health"
+    );
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return SWAGGER_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
