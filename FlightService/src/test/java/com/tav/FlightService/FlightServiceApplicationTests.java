@@ -12,8 +12,7 @@ import org.springframework.test.context.TestPropertySource;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.liquibase.enabled=false",
-        "spring.kafka.bootstrap-servers=",
+"spring.kafka.bootstrap-servers=",
         "app.jwt.secret=test-secret-key-minimum-32-bytes-ok!",
         "app.jwt.expiration-ms=3600000"
 })
