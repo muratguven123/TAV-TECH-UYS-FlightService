@@ -38,8 +38,8 @@ import java.util.function.Supplier;
 @Slf4j
 public class CachingReferenceValidator implements ReferenceValidator {
 
-    static final String POSITIVE = "1";
-    static final String NEGATIVE = "0";
+    public static final String POSITIVE = "1";
+    public static final String NEGATIVE = "0";
 
     private static final Duration TTL          = Duration.ofHours(1);
     private static final Duration NEGATIVE_TTL = Duration.ofMinutes(5);

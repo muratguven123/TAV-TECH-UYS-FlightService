@@ -28,6 +28,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
 
   kafka:
@@ -35,6 +36,12 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        enable.idempotence: true
+        acks: all
+        max.in.flight.requests.per.connection: 5
+        # Tip başlığı yazmayı kapat — consumer kendi eşlemesini yönetir
+        spring.json.use.type.headers: false
     consumer:
       group-id: reference-cache-sync
       auto-offset-reset: earliest
@@ -57,19 +64,14 @@ app:
     url: ${GATEWAY_URL:http://localhost:8080}
   reference:
     base-url: ${REFERENCE_MANAGER_URL:http://localhost:8082}
-    validator: ${REFERENCE_VALIDATOR:caching}   # caching | noop
+    validator: ${REFERENCE_VALIDATOR:caching}
   internal-user:
-    username: ${INTERNAL_USER:flight-service-internal}
-    password: ${INTERNAL_PASS:Internal-Sv1!ChangeMe}
+    username: ${INTERNAL_USER_FLIGHT:flight-service-internal}
+  websocket:
+    # Prod'da gerçek domain'lerle daraltılmalıdır — asla "*" kullanılmaz
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
+rate-limit:
+  capacity: ${RATE_LIMIT_CAPACITY:100}
+  refill-tokens: ${RATE_LIMIT_REFILL_TOKENS:100}
+  refill-seconds: ${RATE_LIMIT_REFILL_SECONDS:60}

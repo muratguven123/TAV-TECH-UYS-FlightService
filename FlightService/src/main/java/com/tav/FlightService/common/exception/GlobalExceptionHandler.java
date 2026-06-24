@@ -2,6 +2,7 @@ package com.tav.FlightService.common.exception;
 
 import com.tav.FlightService.exception.FlightBusinessException;
 import com.tav.FlightService.exception.FlightConflictException;
+import com.tav.FlightService.exception.NotFoundException;
 import com.tav.FlightService.exception.ReferenceNotFoundException;
 import com.tav.FlightService.exception.ServiceUnavailableException;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,11 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(NotFoundException ex) {
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Map<String, Object>> handleBusiness(BusinessException ex) {

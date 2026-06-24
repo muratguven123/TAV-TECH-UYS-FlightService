@@ -56,7 +56,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.jwt.expiration-ms=3600000",
         "app.reference.base-url=http://localhost:9999",
         "app.reference.validator=caching",
-        "app.internal-user.username=flight-service-internal"
+        "app.internal-user.username=flight-service-internal",
+        "app.gateway.auth.enabled=false"
 })
 class Phase5IntegrationTest {
 
@@ -143,14 +144,14 @@ class Phase5IntegrationTest {
 
     @Test
     void negativeCacheHit_rejectsWithoutCallingRm() throws Exception {
-        when(valueOps.get("reference:AIRLINE:TK")).thenReturn("0");
         when(valueOps.get(anyString())).thenReturn("1");  // diğerleri pozitif
+        when(valueOps.get("reference:AIRLINE:TK")).thenReturn("0");
 
         mockMvc.perform(post("/api/flights")
                         .with(user("officer").roles("OPERATION_OFFICER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateFlightRequest(
-                                "TK2001B", "TK", "TC-JFC", "LTBA", "LTFM",
+                                "TK2009", "TK", "TC-JFC", "LTBA", "LTFM",
                                 FlightType.PASSENGER, departure(), arrival()))))
                 .andExpect(status().isUnprocessableEntity());
 
@@ -273,6 +274,7 @@ class Phase5IntegrationTest {
     // ─── D5: Optimistic lock → 409 STALE_VERSION — EntityManager ile ─────────
 
     @Test
+    @org.springframework.transaction.annotation.Transactional
     void optimisticLock_staleVersion_returns409() throws Exception {
         Long id = createFlight("TK2020");
         reset(valueOps);

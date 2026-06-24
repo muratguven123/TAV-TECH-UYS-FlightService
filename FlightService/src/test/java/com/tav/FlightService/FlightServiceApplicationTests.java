@@ -21,6 +21,9 @@ import org.springframework.test.context.TestPropertySource;
 })
 class FlightServiceApplicationTests {
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
     @Test
     void contextLoads() {
     }

@@ -15,6 +15,8 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,6 +28,8 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
     @Value("${app.gateway.secret}")
     private String expectedGatewaySecret;
 
+    @Value("${app.gateway.auth.enabled:true}")
+    private boolean enabled;
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
     private static final java.util.List<String> SWAGGER_PATHS = java.util.List.of(
@@ -37,6 +41,9 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        if (!enabled) {
+            return true;
+        }
         String path = request.getRequestURI();
         return SWAGGER_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
     }
@@ -46,7 +53,7 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         String gatewaySecret = request.getHeader("X-Gateway-Secret");
-        if (!StringUtils.hasText(gatewaySecret) || !gatewaySecret.equals(expectedGatewaySecret)) {
+        if (!StringUtils.hasText(gatewaySecret) || !secretsEqual(gatewaySecret, expectedGatewaySecret)) {
             log.warn("Geçersiz X-Gateway-Secret: {}", request.getRequestURI());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
@@ -73,5 +80,18 @@ public class GatewayAuthFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(auth);
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Timing-safe karşılaştırma. String.equals() karakter sayısı veya ilk farklı karakter
+     * pozisyonuna göre erken döner; MessageDigest.isEqual() sabit zamanlıdır.
+     */
+    private boolean secretsEqual(String provided, String expected) {
+        if (provided == null || expected == null) {
+            return false;
+        }
+        byte[] a = provided.getBytes(StandardCharsets.UTF_8);
+        byte[] b = expected.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(a, b);
     }
 }

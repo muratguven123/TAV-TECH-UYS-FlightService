@@ -25,10 +25,41 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@org.springframework.test.context.TestPropertySource(properties = {
+        "spring.config.import=",
+        "spring.datasource.url=jdbc:h2:mem:flightdb;MODE=MySQL",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
+        "spring.kafka.bootstrap-servers=127.0.0.1:9092",
+        "app.reference.validator=noop",
+        "app.gateway.auth.enabled=false"
+})
 class FlightIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
+    @org.springframework.boot.test.mock.mockito.MockBean(name = "flightEventKafkaTemplate")
+    private org.springframework.kafka.core.KafkaTemplate<String, com.tav.FlightService.events.FlightChangedEvent> flightEventKafkaTemplate;
+
+    @org.springframework.boot.test.mock.mockito.MockBean(name = "auditKafkaTemplate")
+    private org.springframework.kafka.core.KafkaTemplate<String, com.tav.FlightService.events.AuditEvent> auditKafkaTemplate;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        java.util.concurrent.CompletableFuture future =
+                java.util.concurrent.CompletableFuture.completedFuture(org.mockito.Mockito.mock(org.springframework.kafka.support.SendResult.class));
+        org.mockito.Mockito.when(flightEventKafkaTemplate.send(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyString(), org.mockito.Mockito.any()))
+                .thenReturn(future);
+        org.mockito.Mockito.when(auditKafkaTemplate.send(org.mockito.Mockito.anyString(), org.mockito.Mockito.anyString(), org.mockito.Mockito.any()))
+                .thenReturn(future);
+    }
 
     @Autowired
     private ObjectMapper objectMapper;
