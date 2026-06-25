@@ -48,7 +48,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.tav.uys.events,com.tav.FlightService.events"
+        spring.json.trusted.packages: "com.tav.FlightService.events"
         spring.json.value.default.type: com.tav.FlightService.events.ReferenceChangedEvent
 
 eureka:

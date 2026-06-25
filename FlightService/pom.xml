@@ -46,6 +46,11 @@
 		<dependency><groupId>org.springframework.security</groupId><artifactId>spring-security-test</artifactId><scope>test</scope></dependency>
 		<dependency><groupId>org.springframework.kafka</groupId><artifactId>spring-kafka-test</artifactId><scope>test</scope></dependency>
 		<dependency><groupId>com.h2database</groupId><artifactId>h2</artifactId><scope>test</scope></dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-contract-verifier</artifactId>
+			<scope>test</scope>
+		</dependency>
 	
         <dependency>
             <groupId>org.springdoc</groupId>
@@ -88,6 +93,24 @@
 					<argLine>-Duser.language=en -Duser.country=US</argLine>
 					<failIfNoTests>false</failIfNoTests>
 					<failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-contract-maven-plugin</artifactId>
+				<version>4.1.4</version>
+				<extensions>true</extensions>
+				<configuration>
+					<baseClassMappings>
+						<baseClassMapping>
+							<contractPackageRegex>.*flight_events.*</contractPackageRegex>
+							<baseClassFQN>com.tav.FlightService.contract.FlightEventProducerBase</baseClassFQN>
+						</baseClassMapping>
+						<baseClassMapping>
+							<contractPackageRegex>.*flight_audit.*</contractPackageRegex>
+							<baseClassFQN>com.tav.FlightService.contract.FlightAuditProducerBase</baseClassFQN>
+						</baseClassMapping>
+					</baseClassMappings>
 				</configuration>
 			</plugin>
 		</plugins>
