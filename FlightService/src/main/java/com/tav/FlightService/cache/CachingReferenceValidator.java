@@ -1,9 +1,10 @@
 package com.tav.FlightService.cache;
 
 import com.tav.FlightService.client.ReferenceManagerClient;
+import com.tav.FlightService.config.RedisKeys;
 import com.tav.FlightService.validation.ReferenceValidator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
@@ -34,41 +35,48 @@ import java.util.function.Supplier;
 @Primary
 @Component
 @ConditionalOnProperty(name = "app.reference.validator", havingValue = "caching", matchIfMissing = true)
-@RequiredArgsConstructor
 @Slf4j
 public class CachingReferenceValidator implements ReferenceValidator {
 
     public static final String POSITIVE = "1";
     public static final String NEGATIVE = "0";
 
-    private static final Duration TTL          = Duration.ofHours(1);
-    private static final Duration NEGATIVE_TTL = Duration.ofMinutes(5);
+    private static final Duration TTL = Duration.ofHours(1);
 
     private final StringRedisTemplate redisTemplate;
     private final ReferenceManagerClient referenceManagerClient;
+    private final Duration negativeTtl;
 
+    public CachingReferenceValidator(
+            StringRedisTemplate redisTemplate,
+            ReferenceManagerClient referenceManagerClient,
+            @Value("${app.reference.validator.negative-cache-ttl:300}") int negativeCacheTtlSeconds) {
+        this.redisTemplate = redisTemplate;
+        this.referenceManagerClient = referenceManagerClient;
+        this.negativeTtl = Duration.ofSeconds(negativeCacheTtlSeconds);
+        log.info("CachingReferenceValidator initialized: negativeTtl={}s", negativeCacheTtlSeconds);
+    }
+
+    // FIX: TD-011 — hardcoded key string'leri RedisKeys sabitleriyle değiştirildi
     @Override
     public boolean airlineExists(String iataCode) {
-        String key = "reference:AIRLINE:" + iataCode;
-        return lookup(key, () -> referenceManagerClient.getAirline(iataCode));
+        return lookup(RedisKeys.airline(iataCode), () -> referenceManagerClient.getAirline(iataCode));
     }
 
     @Override
     public boolean aircraftExists(String tailNumber) {
-        String key = "reference:AIRCRAFT:" + tailNumber;
-        return lookup(key, () -> referenceManagerClient.getAircraft(tailNumber));
+        return lookup(RedisKeys.aircraft(tailNumber), () -> referenceManagerClient.getAircraft(tailNumber));
     }
 
     @Override
     public boolean stationExists(String icao) {
-        String key = "reference:STATION:" + icao;
-        return lookup(key, () -> referenceManagerClient.getStation(icao));
+        return lookup(RedisKeys.station(icao), () -> referenceManagerClient.getStation(icao));
     }
 
     @Override
     public boolean routeExists(String originIcao, String destinationIcao) {
-        String key = "reference:ROUTE:" + originIcao + "-" + destinationIcao;
-        return lookup(key, () -> referenceManagerClient.getRoute(originIcao, destinationIcao));
+        return lookup(RedisKeys.route(originIcao, destinationIcao),
+                () -> referenceManagerClient.getRoute(originIcao, destinationIcao));
     }
 
     /**
@@ -83,7 +91,7 @@ public class CachingReferenceValidator implements ReferenceValidator {
             String cached = redisTemplate.opsForValue().get(redisKey);
             if (cached != null) {
                 log.debug("Cache hit: {} → {}", redisKey, cached);
-                return POSITIVE.equals(cached);
+                return !NEGATIVE.equals(cached);
             }
         } catch (DataAccessException e) {
             // UC-05: Redis çökerse fail-open — RM'e düş
@@ -100,8 +108,8 @@ public class CachingReferenceValidator implements ReferenceValidator {
                 redisTemplate.opsForValue().set(redisKey, POSITIVE, TTL);
                 log.debug("Cache ısındı (pozitif): {} (TTL={})", redisKey, TTL);
             } else {
-                redisTemplate.opsForValue().set(redisKey, NEGATIVE, NEGATIVE_TTL);
-                log.debug("Cache ısındı (negatif): {} (TTL={})", redisKey, NEGATIVE_TTL);
+                redisTemplate.opsForValue().set(redisKey, NEGATIVE, negativeTtl);
+                log.debug("Cache ısındı (negatif): {} (TTL={})", redisKey, negativeTtl);
             }
         } catch (DataAccessException e) {
             log.warn("Redis yazma hatası (cache warming atlandı): key={}", redisKey);

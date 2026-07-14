@@ -7,6 +7,12 @@ spring:
   config:
     import: optional:configserver:http://config-server:8888
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8090/realms/uys}
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/uys_flights?useSSL=false&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:uys}
@@ -18,9 +24,15 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate   # FIX: DEF-015 — Flyway yönetir
     open-in-view: false
     database-platform: org.hibernate.dialect.MySQLDialect
 
@@ -48,15 +60,21 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.tav.FlightService.events"
-        spring.json.value.default.type: com.tav.FlightService.events.ReferenceChangedEvent
+        spring.json.trusted.packages: "com.tav.uys.events,com.tav.FlightService.events"
+        spring.json.value.default.type: com.tav.uys.events.ReferenceChangedEvent
+        spring.json.use.type.headers: false
 
 eureka:
   client:
     service-url:
       defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+    healthcheck:
+      enabled: true
   instance:
-    prefer-ip-address: true
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:${spring.application.name}}
+    prefer-ip-address: ${EUREKA_PREFER_IP_ADDRESS:true}
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
 
 app:
   gateway:
@@ -65,11 +83,18 @@ app:
   reference:
     base-url: ${REFERENCE_MANAGER_URL:http://localhost:8082}
     validator: ${REFERENCE_VALIDATOR:caching}
+    validator.negative-cache-ttl: ${REFERENCE_NEGATIVE_CACHE_TTL:300}  # saniye
   internal-user:
     username: ${INTERNAL_USER_FLIGHT:flight-service-internal}
   websocket:
-    # Prod'da gerçek domain'lerle daraltılmalıdır — asla "*" kullanılmaz
-    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}
+    # Gateway/nginx üzerinden gelen WS handshake'lerinde Origin değişebilir — pattern kullan
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+    relay:
+      enabled: ${WEBSOCKET_RELAY_ENABLED:false}
+      host: ${WEBSOCKET_RELAY_HOST:rabbitmq}
+      port: ${WEBSOCKET_RELAY_PORT:61613}
+      username: ${WEBSOCKET_RELAY_USERNAME:guest}
+      password: ${WEBSOCKET_RELAY_PASSWORD:guest}
 
 rate-limit:
   capacity: ${RATE_LIMIT_CAPACITY:100}

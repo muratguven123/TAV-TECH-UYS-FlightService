@@ -1,5 +1,7 @@
 package com.tav.FlightService.events;
 
+import com.tav.uys.events.FlightChangedEvent;
+import com.tav.uys.events.FlightChangeType;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.domain.FlightType;
 import com.tav.FlightService.util.TestDataFactory;
@@ -31,22 +33,22 @@ class FlightWebSocketBroadcasterTest {
     @InjectMocks FlightWebSocketBroadcaster broadcaster;
 
     @Test
-    @DisplayName("onFlightChanged → /topic/flights/all + airline + 2 station destination'ına gönderilir")
+    @DisplayName("onFlightChanged → /topic/flights.all + airline + 2 station destination'ına gönderilir")
     void onFlightChanged_fullPayload_sendsToAllFourDestinations() {
         // given
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.CREATED, payload.id(), payload.version(),
-                "alice", Instant.now(), payload);
+                "alice", Instant.now(), payload, 1L);
 
         // when
         broadcaster.onFlightChanged(event);
 
         // then
-        verify(messagingTemplate).convertAndSend("/topic/flights/all", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/airline/" + payload.airlineCode(), event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/" + payload.originStation(), event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/" + payload.destinationStation(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.all", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.airline." + payload.airlineCode(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station." + payload.originStation(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station." + payload.destinationStation(), event);
         verifyNoMoreInteractions(messagingTemplate);
     }
 
@@ -59,16 +61,16 @@ class FlightWebSocketBroadcasterTest {
                 "LTFM", "LTAC", FlightType.PASSENGER,
                 LocalDateTime.now(), LocalDateTime.now(), LocalDate.now(), 0L);
         FlightChangedEvent event = new FlightChangedEvent(
-                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload);
+                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload, 1L);
 
         // when
         broadcaster.onFlightChanged(event);
 
         // then
-        verify(messagingTemplate).convertAndSend("/topic/flights/all", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/LTFM", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/LTAC", event);
-        verify(messagingTemplate, never()).convertAndSend(eq("/topic/flights/airline/null"), any(Object.class));
+        verify(messagingTemplate).convertAndSend("/topic/flights.all", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station.LTFM", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station.LTAC", event);
+        verify(messagingTemplate, never()).convertAndSend(eq("/topic/flights.airline.null"), any(Object.class));
         verifyNoMoreInteractions(messagingTemplate);
     }
 
@@ -81,15 +83,15 @@ class FlightWebSocketBroadcasterTest {
                 null, "LTAC", FlightType.PASSENGER,
                 LocalDateTime.now(), LocalDateTime.now(), LocalDate.now(), 0L);
         FlightChangedEvent event = new FlightChangedEvent(
-                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload);
+                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload, 1L);
 
         // when
         broadcaster.onFlightChanged(event);
 
         // then
-        verify(messagingTemplate).convertAndSend("/topic/flights/all", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/airline/TK", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/LTAC", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.all", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.airline.TK", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station.LTAC", event);
         verifyNoMoreInteractions(messagingTemplate);
     }
 
@@ -102,15 +104,15 @@ class FlightWebSocketBroadcasterTest {
                 "LTFM", null, FlightType.PASSENGER,
                 LocalDateTime.now(), LocalDateTime.now(), LocalDate.now(), 0L);
         FlightChangedEvent event = new FlightChangedEvent(
-                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload);
+                FlightChangeType.UPDATED, 1L, 0L, "alice", Instant.now(), payload, 1L);
 
         // when
         broadcaster.onFlightChanged(event);
 
         // then
-        verify(messagingTemplate).convertAndSend("/topic/flights/all", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/airline/TK", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/LTFM", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.all", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.airline.TK", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station.LTFM", event);
         verifyNoMoreInteractions(messagingTemplate);
     }
 
@@ -121,16 +123,16 @@ class FlightWebSocketBroadcasterTest {
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.CREATED, payload.id(), payload.version(),
-                "alice", Instant.now(), payload);
+                "alice", Instant.now(), payload, 1L);
         doThrow(new RuntimeException("ws disconnected"))
                 .when(messagingTemplate).convertAndSend(any(String.class), any(Object.class));
 
         // when / then
         assertThatCode(() -> broadcaster.onFlightChanged(event)).doesNotThrowAnyException();
         // Bütün 4 destination denemesi yapılmalı — hata yutulduğu için sıradaki destination'lar atlanmaz
-        verify(messagingTemplate).convertAndSend("/topic/flights/all", event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/airline/" + payload.airlineCode(), event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/" + payload.originStation(), event);
-        verify(messagingTemplate).convertAndSend("/topic/flights/station/" + payload.destinationStation(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.all", event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.airline." + payload.airlineCode(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station." + payload.originStation(), event);
+        verify(messagingTemplate).convertAndSend("/topic/flights.station." + payload.destinationStation(), event);
     }
 }

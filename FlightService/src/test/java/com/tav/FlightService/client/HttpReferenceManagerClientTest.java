@@ -234,4 +234,32 @@ class HttpReferenceManagerClientTest {
                 .isInstanceOf(ServiceUnavailableException.class)
                 .hasMessageContaining("kimlik doğrulama");
     }
+
+    // FIX: DEF-009 — getRoute artık ortak helper kullanıyor; 5xx ve ağ hatası senaryoları eklendi.
+
+    @Test
+    @DisplayName("getRoute → 5xx / RestClientException → ServiceUnavailableException")
+    void getRoute_5xx_throwsServiceUnavailable() {
+        // given
+        when(responseSpec.body(RouteDto.class))
+                .thenThrow(new org.springframework.web.client.RestClientException("server error"));
+
+        // when / then
+        assertThatThrownBy(() -> client.getRoute("LTFM", "LTAC"))
+                .isInstanceOf(ServiceUnavailableException.class);
+    }
+
+    @Test
+    @DisplayName("getRoute → 401 Unauthorized → ServiceUnavailableException (auth hatası)")
+    void getRoute_authError_throwsServiceUnavailable() {
+        // given
+        when(responseSpec.body(RouteDto.class))
+                .thenThrow(HttpClientErrorException.create(
+                        HttpStatus.UNAUTHORIZED, "Unauthorized", null, null, null));
+
+        // when / then
+        assertThatThrownBy(() -> client.getRoute("LTFM", "LTAC"))
+                .isInstanceOf(ServiceUnavailableException.class)
+                .hasMessageContaining("kimlik doğrulama");
+    }
 }

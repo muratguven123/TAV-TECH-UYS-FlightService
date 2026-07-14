@@ -4,7 +4,7 @@ import com.tav.FlightService.domain.Flight;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.dto.UpdateFlightRequest;
-import com.tav.FlightService.events.FlightChangeType;
+import com.tav.uys.events.FlightChangeType;
 import com.tav.FlightService.events.FlightEventPublisher;
 import com.tav.FlightService.exception.FlightBusinessException;
 import com.tav.FlightService.exception.NotFoundException;
@@ -203,6 +203,24 @@ class FlightServiceTest {
         verify(flightEventPublisher).publish(eq(FlightChangeType.UPDATED), any(), any());
         verify(zSetOperations).add(eq("flights:sorted"), eq("1"), anyDouble());
         assertThat(result).isEqualTo(flightResponse);
+    }
+
+    @Test
+    @DisplayName("update: varış kalkıştan önce ise FlightBusinessException fırlatılır")
+    void update_whenArrivalBeforeDeparture_throwsBusinessException() {
+        // FIX: DEF-013 — ortak helper ile aynı kural create ve update'te geçerli
+        // given
+        LocalDateTime departure = LocalDateTime.of(2027, 6, 23, 12, 0);
+        LocalDateTime arrival   = LocalDateTime.of(2027, 6, 23, 10, 0); // geride
+        UpdateFlightRequest req = new UpdateFlightRequest(departure, arrival,
+                com.tav.FlightService.domain.FlightType.PASSENGER);
+        when(flightRepository.findById(1L)).thenReturn(Optional.of(flight));
+
+        // when / then
+        assertThatThrownBy(() -> flightService.update(1L, req))
+                .isInstanceOf(com.tav.FlightService.exception.FlightBusinessException.class)
+                .hasMessageContaining("varış");
+        verify(flightRepository, never()).saveAndFlush(any());
     }
 
     @Test

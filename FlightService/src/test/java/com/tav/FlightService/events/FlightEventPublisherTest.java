@@ -1,5 +1,7 @@
 package com.tav.FlightService.events;
 
+import com.tav.uys.events.FlightChangedEvent;
+import com.tav.uys.events.FlightChangeType;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.util.TestDataFactory;
 import org.junit.jupiter.api.DisplayName;
@@ -16,13 +18,20 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FlightEventPublisherTest {
 
     @Mock ApplicationEventPublisher applicationEventPublisher;
+    @Mock FlightEventSequenceGenerator sequenceGenerator;
 
     @InjectMocks FlightEventPublisher publisher;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        when(sequenceGenerator.next()).thenReturn(1L, 2L, 3L, 4L);
+    }
 
     @Test
     @DisplayName("publish(CREATED) → FlightChangedEvent doğru alanlarla yayımlanır")
@@ -46,6 +55,7 @@ class FlightEventPublisherTest {
         assertThat(event.username()).isEqualTo(username);
         assertThat(event.payload()).isSameAs(payload);
         assertThat(event.occurredAt()).isBetween(before, Instant.now());
+        assertThat(event.sequence()).isEqualTo(1L);
         verifyNoMoreInteractions(applicationEventPublisher);
     }
 

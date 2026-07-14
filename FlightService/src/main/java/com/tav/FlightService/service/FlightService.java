@@ -2,12 +2,13 @@ package com.tav.FlightService.service;
 
 import com.tav.FlightService.audit.Auditable;
 import com.tav.FlightService.common.SecurityUtils;
+import com.tav.FlightService.config.RedisKeys;
 import com.tav.FlightService.common.exception.BusinessException;
 import com.tav.FlightService.domain.Flight;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.dto.UpdateFlightRequest;
-import com.tav.FlightService.events.FlightChangeType;
+import com.tav.uys.events.FlightChangeType;
 import com.tav.FlightService.events.FlightEventPublisher;
 import com.tav.FlightService.exception.FlightBusinessException;
 import com.tav.FlightService.exception.FlightConflictException;
@@ -95,7 +96,7 @@ public class FlightService {
     public List<FlightResponse> getFlightsSortedByDeparture(int limit) {
         try {
             Set<String> ids = stringRedisTemplate.opsForZSet()
-                    .range("flights:sorted", 0, limit - 1);
+                    .range(RedisKeys.FLIGHTS_SORTED, 0, limit - 1);
             if (ids == null || ids.isEmpty()) {
                 return Collections.emptyList();
             }
@@ -141,7 +142,12 @@ public class FlightService {
                 "Kalkış istasyonu ile varış istasyonu aynı olamaz: " + request.originStation()
             );
         }
-        if (!request.scheduledArrival().isAfter(request.scheduledDeparture())) {
+        validateDepartureArrivalOrder(request.scheduledDeparture(), request.scheduledArrival());
+    }
+
+    // FIX: DEF-013 — arrival > departure kontrolü ortak helper'a çekildi; create ve update paylaşır.
+    private void validateDepartureArrivalOrder(LocalDateTime departure, LocalDateTime arrival) {
+        if (!arrival.isAfter(departure)) {
             throw new FlightBusinessException(
                 "Planlanan varış zamanı, kalkış zamanından sonra olmalıdır."
             );
@@ -153,9 +159,8 @@ public class FlightService {
     public FlightResponse update(Long id, UpdateFlightRequest req) {
         Flight flight = flightRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("Uçuş bulunamadı: " + id));
-        if (!req.scheduledArrival().isAfter(req.scheduledDeparture())) {
-            throw new BusinessException("Varış zamanı kalkıştan sonra olmalı");
-        }
+        // FIX: DEF-013 — BusinessException yerine FlightBusinessException; ortak helper kullanılır.
+        validateDepartureArrivalOrder(req.scheduledDeparture(), req.scheduledArrival());
         flight.setScheduledDeparture(req.scheduledDeparture());
         flight.setScheduledArrival(req.scheduledArrival());
         flight.setFlightType(req.flightType());
@@ -208,7 +213,7 @@ public class FlightService {
         try {
             double score = scheduledDeparture.toEpochSecond(ZoneOffset.UTC);
             stringRedisTemplate.opsForZSet()
-                    .add("flights:sorted", flightId.toString(), score);
+                    .add(RedisKeys.FLIGHTS_SORTED, flightId.toString(), score);
         } catch (Exception e) {
             log.warn("ZSET güncelleme başarısız (fail-open): flightId={}, hata={}", flightId, e.getMessage());
         }
@@ -221,7 +226,7 @@ public class FlightService {
     private void zsetRemove(Long flightId) {
         try {
             stringRedisTemplate.opsForZSet()
-                    .remove("flights:sorted", flightId.toString());
+                    .remove(RedisKeys.FLIGHTS_SORTED, flightId.toString());
         } catch (Exception e) {
             log.warn("ZSET silme başarısız (fail-open): flightId={}, hata={}", flightId, e.getMessage());
         }

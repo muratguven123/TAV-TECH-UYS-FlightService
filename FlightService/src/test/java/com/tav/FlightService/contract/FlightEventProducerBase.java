@@ -2,8 +2,8 @@ package com.tav.FlightService.contract;
 
 import com.tav.FlightService.domain.FlightType;
 import com.tav.FlightService.dto.FlightResponse;
-import com.tav.FlightService.events.FlightChangeType;
-import com.tav.FlightService.events.FlightChangedEvent;
+import com.tav.uys.events.FlightChangeType;
+import com.tav.uys.events.FlightChangedEvent;
 import com.tav.FlightService.events.FlightEventKafkaRelay;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +45,9 @@ import java.time.LocalDateTime;
         "spring.cloud.discovery.enabled=false",
         "app.gateway.auth.enabled=false",
         "app.reference.validator=noop",
+        "stubrunner.stream.enabled=false",
+        "stubrunner.integration.enabled=false",
+        "stubrunner.kafka.enabled=true",
         "spring.kafka.producer.properties.spring.json.add.type.headers=false"
 })
 @AutoConfigureMessageVerifier
@@ -54,7 +57,11 @@ import java.time.LocalDateTime;
         bootstrapServersProperty = "spring.kafka.bootstrap-servers"
 )
 @TestPropertySource(locations = "classpath:/contract-test.properties")
+@org.springframework.context.annotation.Import(FlightEventProducerBase.ContractVerifierBridgeConfig.class)
 public abstract class FlightEventProducerBase {
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     /** Kontrat regex ^[A-Z]{2}\d{4}$ ile uyumlu test verisi */
     static final FlightResponse SAMPLE_FLIGHT = new FlightResponse(
@@ -83,7 +90,7 @@ public abstract class FlightEventProducerBase {
     public void triggerFlightCreated() {
         relay.onFlightChanged(new FlightChangedEvent(
                 FlightChangeType.CREATED, 1L, 0L, "test-user",
-                Instant.parse("2026-06-24T10:00:00Z"), SAMPLE_FLIGHT));
+                Instant.parse("2026-06-24T10:00:00Z"), SAMPLE_FLIGHT, 1L));
     }
 
     /** SCC tarafından triggerFlightUpdated() label'ıyla tetiklenir. */
@@ -98,7 +105,7 @@ public abstract class FlightEventProducerBase {
         );
         relay.onFlightChanged(new FlightChangedEvent(
                 FlightChangeType.UPDATED, 1L, 1L, "test-user",
-                Instant.parse("2026-06-24T10:05:00Z"), updated));
+                Instant.parse("2026-06-24T10:05:00Z"), updated, 2L));
     }
 
     /** SCC tarafından triggerFlightDeleted() label'ıyla tetiklenir. */
@@ -113,6 +120,41 @@ public abstract class FlightEventProducerBase {
         );
         relay.onFlightChanged(new FlightChangedEvent(
                 FlightChangeType.DELETED, 1L, 2L, "test-user",
-                Instant.parse("2026-06-24T10:10:00Z"), atDeletion));
+                Instant.parse("2026-06-24T10:10:00Z"), atDeletion, 3L));
+    }
+
+    @org.springframework.boot.test.context.TestConfiguration
+    public static class ContractVerifierBridgeConfig {
+
+        @org.springframework.context.annotation.Bean("flight.events")
+        public org.springframework.messaging.MessageChannel flightEventsChannel() {
+            return new org.springframework.integration.channel.QueueChannel();
+        }
+
+        @org.springframework.kafka.annotation.KafkaListener(
+                topics = "flight.events",
+                groupId = "contract-verifier-bridge-events",
+                properties = {
+                    "spring.json.value.default.type=com.tav.uys.events.FlightChangedEvent",
+                    "spring.json.trusted.packages=com.tav.uys.events"
+                }
+        )
+        public void bridgeToChannel(
+                org.springframework.messaging.Message<com.tav.uys.events.FlightChangedEvent> kafkaMessage
+        ) {
+            org.springframework.messaging.MessageChannel channel = flightEventsChannel();
+            String key = (String) kafkaMessage.getHeaders().get(org.springframework.kafka.support.KafkaHeaders.RECEIVED_KEY);
+            com.tav.uys.events.FlightChangedEvent payload = kafkaMessage.getPayload();
+            
+            java.util.Map<String, Object> headers = new java.util.HashMap<>();
+            headers.put("kafka_messageKey", key);
+            
+            org.springframework.messaging.Message<?> channelMessage = 
+                    org.springframework.messaging.support.MessageBuilder
+                            .withPayload(payload)
+                            .copyHeaders(headers)
+                            .build();
+            channel.send(channelMessage);
+        }
     }
 }

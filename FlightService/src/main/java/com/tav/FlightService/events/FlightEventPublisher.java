@@ -1,6 +1,8 @@
 package com.tav.FlightService.events;
 
 import com.tav.FlightService.dto.FlightResponse;
+import com.tav.uys.events.FlightChangeType;
+import com.tav.uys.events.FlightChangedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -10,9 +12,12 @@ import java.time.Instant;
 public class FlightEventPublisher {
 
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final FlightEventSequenceGenerator sequenceGenerator;
 
-    public FlightEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
+    public FlightEventPublisher(ApplicationEventPublisher applicationEventPublisher,
+                                FlightEventSequenceGenerator sequenceGenerator) {
         this.applicationEventPublisher = applicationEventPublisher;
+        this.sequenceGenerator = sequenceGenerator;
     }
 
     public void publish(FlightChangeType changeType, FlightResponse payload, String username) {
@@ -22,7 +27,8 @@ public class FlightEventPublisher {
                 payload.version(),
                 username,
                 Instant.now(),
-                payload
+                payload,
+                sequenceGenerator.next()
         );
         applicationEventPublisher.publishEvent(event);
     }

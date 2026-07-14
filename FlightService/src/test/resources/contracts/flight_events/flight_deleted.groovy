@@ -26,6 +26,7 @@ Contract.make {
             username          : $(producer(regex(".+")),                       consumer("test-user")),
             occurredAt        : $(producer(regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z")),
                                    consumer("2026-06-24T10:10:00Z")),
+            sequence          : $(producer(regex("[0-9]+")),                  consumer(3)),
             payload: [
                 id               : $(producer(regex("[0-9]+")),                    consumer(1)),
                 flightNumber     : $(producer(regex("^[A-Z]{2}\\d{4}\$")),         consumer("TK0001")),

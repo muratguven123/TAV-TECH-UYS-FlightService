@@ -1,5 +1,6 @@
 package com.tav.FlightService.ratelimit;
 
+// FIX: TD-011 — capacity artık @Value ile gelir; ReflectionTestUtils ile enjekte edilir.
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,11 +12,13 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@DisplayName("RateLimitInterceptor — Token bucket rate limiting testleri")
 class RateLimitInterceptorTest {
 
     private RateLimitInterceptor interceptor;
@@ -23,6 +26,9 @@ class RateLimitInterceptorTest {
     @BeforeEach
     void setUp() {
         interceptor = new RateLimitInterceptor();
+        // FIX: TD-011 — @Value alanlarını varsayılan değerleriyle set et
+        ReflectionTestUtils.setField(interceptor, "capacity", 30);
+        ReflectionTestUtils.setField(interceptor, "refillSeconds", 60);
         authenticate("alice");
     }
 
@@ -113,6 +119,32 @@ class RateLimitInterceptorTest {
                 .contains("timestamp")
                 .contains("status")
                 .contains("error");
+    }
+
+    // FIX: TD-011 — config'den capacity okunduğunu doğrula
+    @Test
+    @DisplayName("customCapacity: capacity=5 ile 5. istek dahil geçer, 6. istek → 429")
+    void customCapacity_enforced() throws Exception {
+        // given — capacity = 5
+        RateLimitInterceptor custom = new RateLimitInterceptor();
+        ReflectionTestUtils.setField(custom, "capacity", 5);
+        ReflectionTestUtils.setField(custom, "refillSeconds", 60);
+        authenticate("carol");
+
+        // when — 5 istek harca
+        for (int i = 0; i < 5; i++) {
+            assertThat(custom.preHandle(new MockHttpServletRequest(), new MockHttpServletResponse(), null))
+                    .as("istek %d izin verilmeli", i + 1)
+                    .isTrue();
+        }
+
+        // 6. istek → 429
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        boolean allowed = custom.preHandle(new MockHttpServletRequest(), response, null);
+
+        // then
+        assertThat(allowed).isFalse();
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
     }
 
     private void authenticate(String username) {

@@ -49,7 +49,11 @@ import java.util.Map;
         bootstrapServersProperty = "spring.kafka.bootstrap-servers"
 )
 @TestPropertySource(locations = "classpath:/contract-test.properties")
+@org.springframework.context.annotation.Import(FlightAuditProducerBase.ContractVerifierBridgeConfig.class)
 public abstract class FlightAuditProducerBase {
+
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     static final String TOPIC = "flight.audit";
 
@@ -93,5 +97,40 @@ public abstract class FlightAuditProducerBase {
                 null
         );
         auditKafkaTemplate.send(TOPIC, event.action(), event);
+    }
+
+    @org.springframework.boot.test.context.TestConfiguration
+    public static class ContractVerifierBridgeConfig {
+
+        @org.springframework.context.annotation.Bean("flight.audit")
+        public org.springframework.messaging.MessageChannel flightAuditChannel() {
+            return new org.springframework.integration.channel.QueueChannel();
+        }
+
+        @org.springframework.kafka.annotation.KafkaListener(
+                topics = "flight.audit",
+                groupId = "contract-verifier-bridge-audit",
+                properties = {
+                    "spring.json.value.default.type=com.tav.FlightService.events.AuditEvent",
+                    "spring.json.trusted.packages=com.tav.FlightService.events"
+                }
+        )
+        public void bridgeToChannel(
+                org.springframework.messaging.Message<com.tav.FlightService.events.AuditEvent> kafkaMessage
+        ) {
+            org.springframework.messaging.MessageChannel channel = flightAuditChannel();
+            String key = (String) kafkaMessage.getHeaders().get(org.springframework.kafka.support.KafkaHeaders.RECEIVED_KEY);
+            com.tav.FlightService.events.AuditEvent payload = kafkaMessage.getPayload();
+            
+            java.util.Map<String, Object> headers = new java.util.HashMap<>();
+            headers.put("kafka_messageKey", key);
+            
+            org.springframework.messaging.Message<?> channelMessage = 
+                    org.springframework.messaging.support.MessageBuilder
+                            .withPayload(payload)
+                            .copyHeaders(headers)
+                            .build();
+            channel.send(channelMessage);
+        }
     }
 }

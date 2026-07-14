@@ -1,5 +1,7 @@
 package com.tav.FlightService.events;
 
+import com.tav.uys.events.FlightChangedEvent;
+import com.tav.uys.events.FlightChangeType;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.util.TestDataFactory;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +40,7 @@ class FlightEventKafkaRelayTest {
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.CREATED, payload.id(), payload.version(),
-                "alice", Instant.now(), payload);
+                "alice", Instant.now(), payload, 1L);
 
         SendResult<String, FlightChangedEvent> sendResult = mockSendResult();
         when(kafkaTemplate.send(eq("flight.events"), any(String.class), any(FlightChangedEvent.class)))
@@ -66,7 +68,7 @@ class FlightEventKafkaRelayTest {
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.UPDATED, payload.id(), 2L,
-                "bob", Instant.now(), payload);
+                "bob", Instant.now(), payload, 2L);
 
         when(kafkaTemplate.send(any(String.class), any(String.class), any(FlightChangedEvent.class)))
                 .thenReturn(CompletableFuture.completedFuture(mockSendResult()));
@@ -85,7 +87,7 @@ class FlightEventKafkaRelayTest {
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.DELETED, payload.id(), payload.version(),
-                "carol", Instant.now(), payload);
+                "carol", Instant.now(), payload, 3L);
 
         when(kafkaTemplate.send(any(String.class), any(String.class), any(FlightChangedEvent.class)))
                 .thenReturn(CompletableFuture.completedFuture(mockSendResult()));
@@ -104,7 +106,7 @@ class FlightEventKafkaRelayTest {
         FlightResponse payload = TestDataFactory.buildFlightResponse();
         FlightChangedEvent event = new FlightChangedEvent(
                 FlightChangeType.CREATED, payload.id(), payload.version(),
-                "alice", Instant.now(), payload);
+                "alice", Instant.now(), payload, 1L);
 
         CompletableFuture<SendResult<String, FlightChangedEvent>> failed = new CompletableFuture<>();
         failed.completeExceptionally(new RuntimeException("kafka down"));

@@ -1,7 +1,7 @@
 package com.tav.FlightService.config;
 
 import com.tav.FlightService.events.AuditEvent;
-import com.tav.FlightService.events.FlightChangedEvent;
+import com.tav.uys.events.FlightChangedEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,9 +47,19 @@ public class KafkaProducerConfig {
         return props;
     }
 
+    private <T> DefaultKafkaProducerFactory<String, T> createProducerFactory(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new DefaultKafkaProducerFactory<>(
+                commonProducerProps(),
+                new StringSerializer(),
+                new JsonSerializer<>(objectMapper)
+        );
+    }
+
     @Bean
-    public ProducerFactory<String, Object> commonProducerFactory() {
-        return new DefaultKafkaProducerFactory<>(commonProducerProps());
+    public ProducerFactory<String, Object> commonProducerFactory(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return createProducerFactory(objectMapper);
     }
 
     /**
@@ -57,9 +67,9 @@ public class KafkaProducerConfig {
      * Inject ederken: @Qualifier("flightEventKafkaTemplate")
      */
     @Bean("flightEventKafkaTemplate")
-    public KafkaTemplate<String, FlightChangedEvent> flightEventKafkaTemplate() {
-        return new KafkaTemplate<>(
-                new DefaultKafkaProducerFactory<>(commonProducerProps()));
+    public KafkaTemplate<String, FlightChangedEvent> flightEventKafkaTemplate(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new KafkaTemplate<>(createProducerFactory(objectMapper));
     }
 
     /**
@@ -67,8 +77,8 @@ public class KafkaProducerConfig {
      * Inject ederken: @Qualifier("auditKafkaTemplate")
      */
     @Bean("auditKafkaTemplate")
-    public KafkaTemplate<String, AuditEvent> auditKafkaTemplate() {
-        return new KafkaTemplate<>(
-                new DefaultKafkaProducerFactory<>(commonProducerProps()));
+    public KafkaTemplate<String, AuditEvent> auditKafkaTemplate(
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new KafkaTemplate<>(createProducerFactory(objectMapper));
     }
 }

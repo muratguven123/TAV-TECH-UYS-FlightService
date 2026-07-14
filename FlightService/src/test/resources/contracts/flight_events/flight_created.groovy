@@ -4,7 +4,7 @@ import org.springframework.cloud.contract.spec.Contract
  * flight.events :: CREATED
  *
  * Üretici (FlightService): FlightEventKafkaRelay, partition key = flightId.toString()
- * Tüketici (FlightArchiveService): FlightEventArchiver, FlightChangedEventDto olarak deserialize eder.
+ * Tüketici (FlightArchiveService): FlightEventArchiver, FlightChangedEvent (uys-events-contract) olarak deserialize eder.
  */
 Contract.make {
     label("triggerFlightCreated")
@@ -26,6 +26,7 @@ Contract.make {
             username          : $(producer(regex(".+")),                       consumer("test-user")),
             occurredAt        : $(producer(regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z")),
                                    consumer("2026-06-24T10:00:00Z")),
+            sequence          : $(producer(regex("[0-9]+")),                  consumer(1)),
             payload: [
                 id               : $(producer(regex("[0-9]+")),                    consumer(1)),
                 flightNumber     : $(producer(regex("^[A-Z]{2}\\d{4}\$")),         consumer("TK0001")),

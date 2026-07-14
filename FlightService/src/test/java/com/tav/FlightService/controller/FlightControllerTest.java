@@ -3,7 +3,7 @@ package com.tav.FlightService.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.tav.FlightService.common.exception.GlobalExceptionHandler;
-import com.tav.FlightService.dto.BulkUploadResult;
+import com.tav.FlightService.dto.BulkUploadJobResponse;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.dto.FlightResponse;
 import com.tav.FlightService.dto.UpdateFlightRequest;
@@ -219,20 +219,18 @@ class FlightControllerTest {
     // ------------------------------------------------------------------ BULK CSV
 
     @Test
-    @DisplayName("POST /api/flights/bulk → CSV upload sonuç döner")
-    void uploadCsv_validFile_returns200WithReport() throws Exception {
+    @DisplayName("POST /api/flights/bulk → 202 Accepted ve jobId döner")
+    void uploadCsv_validFile_returns202WithJobId() throws Exception {
         // given
-        when(flightCsvService.upload(any())).thenReturn(new BulkUploadResult(2, 2, 0, List.of()));
+        when(flightCsvService.submitBulkUpload(any())).thenReturn("job-abc-123");
         MockMultipartFile file = new MockMultipartFile(
                 "file", "flights.csv", MediaType.TEXT_PLAIN_VALUE,
                 "header\nrow".getBytes());
 
         // when / then
         mockMvc.perform(multipart("/api/flights/bulk").file(file))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalRows").value(2))
-                .andExpect(jsonPath("$.successCount").value(2))
-                .andExpect(jsonPath("$.failureCount").value(0));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").value("job-abc-123"));
     }
 
     private CreateFlightRequest futureCreateRequest() {

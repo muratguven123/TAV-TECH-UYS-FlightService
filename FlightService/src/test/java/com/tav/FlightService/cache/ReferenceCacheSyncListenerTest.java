@@ -1,19 +1,19 @@
 package com.tav.FlightService.cache;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tav.FlightService.events.ChangeType;
-import com.tav.FlightService.events.ReferenceChangedEvent;
-import com.tav.FlightService.events.ReferenceEntityType;
+import com.tav.FlightService.config.RedisKeys;
+import com.tav.uys.events.ChangeType;
+import com.tav.uys.events.ReferenceChangedEvent;
+import com.tav.uys.events.ReferenceEntityType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Duration;
 import java.util.Map;
@@ -21,210 +21,153 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ReferenceCacheSyncListenerTest {
 
     @Mock StringRedisTemplate stringRedisTemplate;
     @Mock ValueOperations<String, String> valueOperations;
+    @Mock SimpMessagingTemplate messagingTemplate;
 
-    @Spy ObjectMapper objectMapper = new ObjectMapper();
-
-    @InjectMocks ReferenceCacheSyncListener listener;
+    ReferenceCacheSyncListener listener;
 
     @BeforeEach
     void setUp() {
         lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        listener = new ReferenceCacheSyncListener(stringRedisTemplate, messagingTemplate);
     }
 
     // ---------------------------------------------------------------- DELETED
 
     @Test
-    @DisplayName("DELETED AIRLINE → reference:AIRLINE:<key> Redis'ten silinir")
+    @DisplayName("DELETED AIRLINE → RedisKeys.fromEvent() ile üretilen anahtar Redis'ten silinir")
     void onReferenceChanged_DELETED_airline_deletesKey() {
-        // given
+        // FIX: TD-011 — hardcoded string yerine RedisKeys.fromEvent() ile beklenen anahtar
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRLINE, ChangeType.DELETED, "TK", null);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate).delete("reference:AIRLINE:TK");
+        verify(stringRedisTemplate).delete(RedisKeys.fromEvent("AIRLINE", "TK"));
         verify(stringRedisTemplate, never()).opsForValue();
+        verifyWebSocketPush("AIRLINE", "DELETED", "TK");
     }
 
     @Test
-    @DisplayName("DELETED STATION → reference:STATION:<key> silinir")
+    @DisplayName("DELETED STATION → RedisKeys.fromEvent() ile üretilen anahtar silinir")
     void onReferenceChanged_DELETED_station_deletesKey() {
-        // given
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.STATION, ChangeType.DELETED, "LTFM", null);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate).delete("reference:STATION:LTFM");
+        verify(stringRedisTemplate).delete(RedisKeys.fromEvent("STATION", "LTFM"));
     }
 
     @Test
-    @DisplayName("DELETED AIRCRAFT → reference:AIRCRAFT:<key> silinir")
+    @DisplayName("DELETED AIRCRAFT → RedisKeys.fromEvent() ile üretilen anahtar silinir")
     void onReferenceChanged_DELETED_aircraft_deletesKey() {
-        // given
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRCRAFT, ChangeType.DELETED, "TC-JFA", null);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate).delete("reference:AIRCRAFT:TC-JFA");
+        verify(stringRedisTemplate).delete(RedisKeys.fromEvent("AIRCRAFT", "TC-JFA"));
     }
 
     @Test
-    @DisplayName("DELETED ROUTE → reference:ROUTE:<key> silinir")
+    @DisplayName("DELETED ROUTE → RedisKeys.fromEvent() anahtarı silinir; route() ile aynı format (cache invalidation)")
     void onReferenceChanged_DELETED_route_deletesKey() {
-        // given
+        // FIX: TD-011 — kritik cross-service test: RouteService "LTFM-LTAC" formatında businessKey üretiyor
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.ROUTE, ChangeType.DELETED, "LTFM-LTAC", null);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate).delete("reference:ROUTE:LTFM-LTAC");
+        // fromEvent("ROUTE","LTFM-LTAC") == RedisKeys.route("LTFM","LTAC") → invalidation çalışır
+        verify(stringRedisTemplate).delete(RedisKeys.route("LTFM", "LTAC"));
     }
 
     // ---------------------------------------------------------------- CREATED / UPDATED
 
     @Test
-    @DisplayName("CREATED AIRLINE → payload JSON olarak 1 saat TTL ile cache'lenir")
-    void onReferenceChanged_CREATED_airline_cachesSerializedPayload() {
-        // given
+    @DisplayName("CREATED AIRLINE → RedisKeys.fromEvent() anahtarına '1' yazılır (negatif cache invalidation)")
+    void onReferenceChanged_CREATED_airline_writesPositive() {
+        // FIX: TD-011 — hardcoded string yerine RedisKeys helper
         Map<String, Object> payload = Map.of("code", "TK", "name", "Turkish Airlines");
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRLINE, ChangeType.CREATED, "TK", payload);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate).opsForValue();
-        verify(valueOperations).set(
-                eq("reference:AIRLINE:TK"),
-                any(String.class),
-                eq(Duration.ofHours(1))
-        );
+        verify(valueOperations).set(RedisKeys.airline("TK"), "1", Duration.ofHours(1));
         verify(stringRedisTemplate, never()).delete(any(String.class));
+        verifyWebSocketPush("AIRLINE", "CREATED", "TK");
     }
 
     @Test
-    @DisplayName("UPDATED STATION → payload yeniden serialize edilip set edilir")
-    void onReferenceChanged_UPDATED_station_setsValue() {
-        // given
+    @DisplayName("UPDATED STATION → RedisKeys.fromEvent() anahtarına '1' yazılır")
+    void onReferenceChanged_UPDATED_station_writesPositive() {
         Map<String, Object> payload = Map.of("code", "LTFM", "name", "Istanbul Airport");
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.STATION, ChangeType.UPDATED, "LTFM", payload);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(valueOperations).set(
-                eq("reference:STATION:LTFM"),
-                any(String.class),
-                eq(Duration.ofHours(1))
-        );
+        verify(valueOperations).set(RedisKeys.station("LTFM"), "1", Duration.ofHours(1));
     }
 
-    // ---------------------------------------------------------------- Null payload
-
     @Test
-    @DisplayName("CREATED + null payload → log + return, Redis'e dokunulmaz")
-    void onReferenceChanged_CREATED_nullPayload_doesNothing() {
-        // given
+    @DisplayName("CREATED + null payload → yine '1' yazılır (referans oluşturulmuş)")
+    void onReferenceChanged_CREATED_nullPayload_stillWritesPositive() {
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRLINE, ChangeType.CREATED, "TK", null);
 
-        // when
         listener.onReferenceChanged(event);
 
-        // then
-        verify(stringRedisTemplate, never()).delete(any(String.class));
-        verify(stringRedisTemplate, never()).opsForValue();
-        verifyNoInteractions(valueOperations);
+        verify(valueOperations).set(RedisKeys.airline("TK"), "1", Duration.ofHours(1));
     }
 
-    @Test
-    @DisplayName("UPDATED + null payload → cache'e yazma yapılmaz")
-    void onReferenceChanged_UPDATED_nullPayload_doesNothing() {
-        // given
-        ReferenceChangedEvent event = new ReferenceChangedEvent(
-                ReferenceEntityType.ROUTE, ChangeType.UPDATED, "LTFM-LTAC", null);
-
-        // when
-        listener.onReferenceChanged(event);
-
-        // then
-        verifyNoInteractions(valueOperations);
-        verify(stringRedisTemplate, never()).delete(any(String.class));
-    }
-
-    // ---------------------------------------------------------------- Hata yutma
+    // ---------------------------------------------------------------- Redis hata yutma
 
     @Test
-    @DisplayName("CREATED + Redis set fail → exception propagate etmez (consumer kilitlenmesin)")
+    @DisplayName("CREATED + Redis set fail → exception yutulur (consumer kilitlenmez)")
     void onReferenceChanged_CREATED_whenRedisThrows_doesNotPropagate() {
-        // given
         Map<String, Object> payload = Map.of("code", "TK");
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRLINE, ChangeType.CREATED, "TK", payload);
-        doThrow(new RuntimeException("redis down"))
+        doThrow(new DataAccessException("redis down") {})
                 .when(valueOperations).set(any(String.class), any(String.class), any(Duration.class));
 
-        // when / then
-        // NOT: ReferenceCacheSyncListener mevcut haliyle Redis exception'ı yutmuyor;
-        // mevcut davranışı belgeliyoruz. Eğer poison-pill koruması eklenirse
-        // bu test "doesNotThrowAnyException" olarak güncellenmelidir.
-        assertThatCode(() -> listener.onReferenceChanged(event))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("redis down");
+        assertThatCode(() -> listener.onReferenceChanged(event)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("DELETED + Redis delete fail → exception propagate eder (mevcut davranış)")
-    void onReferenceChanged_DELETED_whenRedisThrows_propagates() {
-        // given
+    @DisplayName("DELETED + Redis delete fail → exception yutulur")
+    void onReferenceChanged_DELETED_whenRedisThrows_doesNotPropagate() {
         ReferenceChangedEvent event = new ReferenceChangedEvent(
                 ReferenceEntityType.AIRLINE, ChangeType.DELETED, "TK", null);
-        doThrow(new RuntimeException("redis down"))
+        doThrow(new DataAccessException("redis down") {})
                 .when(stringRedisTemplate).delete(any(String.class));
 
-        // when / then
-        assertThatCode(() -> listener.onReferenceChanged(event))
-                .isInstanceOf(RuntimeException.class);
+        assertThatCode(() -> listener.onReferenceChanged(event)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("JsonProcessingException benzeri serialization hatası → propagate etmez (poison-pill koruması)")
-    void onReferenceChanged_whenSerializationFails_doesNotPropagate() throws Exception {
-        // given
-        Map<String, Object> payload = Map.of("code", "TK");
+    @DisplayName("CREATED + WebSocket push fail → exception yutulur")
+    void onReferenceChanged_CREATED_whenWebSocketThrows_doesNotPropagate() {
         ReferenceChangedEvent event = new ReferenceChangedEvent(
-                ReferenceEntityType.AIRLINE, ChangeType.CREATED, "TK", payload);
-        doThrow(new com.fasterxml.jackson.core.JsonProcessingException("bad json") {})
-                .when(objectMapper).writeValueAsString(any());
+                ReferenceEntityType.AIRLINE, ChangeType.CREATED, "TK", null);
+        doThrow(new RuntimeException("ws down"))
+                .when(messagingTemplate).convertAndSend(any(String.class), any(Object.class));
 
-        // when / then
         assertThatCode(() -> listener.onReferenceChanged(event)).doesNotThrowAnyException();
-        verifyNoMoreInteractions(valueOperations);
+    }
+
+    private void verifyWebSocketPush(String entityType, String changeType, String businessKey) {
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/reference.changed"),
+                eq(Map.of("entityType", entityType, "changeType", changeType, "businessKey", businessKey)));
     }
 }

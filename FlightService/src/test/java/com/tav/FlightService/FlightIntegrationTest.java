@@ -2,7 +2,7 @@ package com.tav.FlightService;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tav.FlightService.domain.FlightType;
-import com.tav.FlightService.dto.BulkUploadResult;
+import com.tav.FlightService.dto.BulkUploadJobResponse;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.repository.FlightRepository;
 import org.junit.jupiter.api.Test;
@@ -10,10 +10,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.core.task.SyncTaskExecutor;
+
+import java.util.concurrent.Executor;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@Import(FlightIntegrationTest.SyncBulkUploadConfig.class)
+@EmbeddedKafka(partitions = 1, topics = {"reference.events"})
 @org.springframework.test.context.TestPropertySource(properties = {
         "spring.config.import=",
         "spring.datasource.url=jdbc:h2:mem:flightdb;MODE=MySQL",
@@ -33,9 +41,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration",
-        "spring.kafka.bootstrap-servers=127.0.0.1:9092",
+        // Gerçek olmayan bir broker'a (127.0.0.1:9092) bağlanmak @KafkaListener consumer'ının
+        // sonsuza kadar yeniden bağlanmayı denemesine ve testin hang/döngüye girmesine yol açıyordu.
+        // Embedded broker kullanarak consumer anında bağlanır.
+        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
         "app.reference.validator=noop",
-        "app.gateway.auth.enabled=false"
+        "app.gateway.auth.enabled=false",
+        "rate-limit.capacity=30",
+        "spring.main.allow-bean-definition-overriding=true"
 })
 class FlightIntegrationTest {
 
@@ -46,7 +59,7 @@ class FlightIntegrationTest {
     private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     @org.springframework.boot.test.mock.mockito.MockBean(name = "flightEventKafkaTemplate")
-    private org.springframework.kafka.core.KafkaTemplate<String, com.tav.FlightService.events.FlightChangedEvent> flightEventKafkaTemplate;
+    private org.springframework.kafka.core.KafkaTemplate<String, com.tav.uys.events.FlightChangedEvent> flightEventKafkaTemplate;
 
     @org.springframework.boot.test.mock.mockito.MockBean(name = "auditKafkaTemplate")
     private org.springframework.kafka.core.KafkaTemplate<String, com.tav.FlightService.events.AuditEvent> auditKafkaTemplate;
@@ -215,14 +228,15 @@ class FlightIntegrationTest {
             "file", "flights.csv", "text/csv", csv.getBytes());
 
         String json = mockMvc.perform(multipart("/api/flights/bulk").file(file))
-            .andExpect(status().isOk())
+            .andExpect(status().isAccepted())
             .andReturn().getResponse().getContentAsString();
 
-        BulkUploadResult result = objectMapper.readValue(json, BulkUploadResult.class);
-        assertThat(result.totalRows()).isEqualTo(5);        // totalRows = successCount + failureCount
-        assertThat(result.successCount()).isEqualTo(3);
-        assertThat(result.failureCount()).isEqualTo(2);
-        assertThat(result.errors()).hasSize(2);
+        BulkUploadJobResponse job = objectMapper.readValue(json, BulkUploadJobResponse.class);
+        assertThat(job.jobId()).isNotBlank();
+
+        assertThat(flightRepository.findAll().stream()
+                .filter(f -> f.getFlightNumber().startsWith("TK199"))
+                .count()).isEqualTo(3);
     }
 
     @Test
@@ -242,12 +256,11 @@ class FlightIntegrationTest {
             "file", "dup.csv", "text/csv", csv.getBytes());
 
         String json = mockMvc.perform(multipart("/api/flights/bulk").file(file))
-            .andExpect(status().isOk())
+            .andExpect(status().isAccepted())
             .andReturn().getResponse().getContentAsString();
 
-        BulkUploadResult result = objectMapper.readValue(json, BulkUploadResult.class);
-        assertThat(result.successCount()).isZero();
-        assertThat(result.errors()).hasSize(1);
+        BulkUploadJobResponse job = objectMapper.readValue(json, BulkUploadJobResponse.class);
+        assertThat(job.jobId()).isNotBlank();
     }
 
     // ─── Rate Limiting ─────────────────────────────────────────────────────────
@@ -274,5 +287,13 @@ class FlightIntegrationTest {
                 .content(validRequestJson()))
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.error").value("Dakikalık istek limiti aşıldı (maks 30)"));
+    }
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class SyncBulkUploadConfig {
+        @Bean(name = "bulkUploadExecutor")
+        Executor bulkUploadExecutor() {
+            return new SyncTaskExecutor();
+        }
     }
 }

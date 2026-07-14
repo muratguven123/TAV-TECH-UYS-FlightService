@@ -1,5 +1,6 @@
 package com.tav.FlightService.controller;
 
+import com.tav.FlightService.dto.BulkUploadJobResponse;
 import com.tav.FlightService.dto.BulkUploadResult;
 import com.tav.FlightService.dto.CreateFlightRequest;
 import com.tav.FlightService.dto.FlightResponse;
@@ -37,7 +38,7 @@ public class FlightController {
     // ------------------------------------------------------------------ READ
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST', 'ADMIN')")
     public List<FlightResponse> listFlights(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate flightDate) {
@@ -48,13 +49,13 @@ public class FlightController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST', 'ADMIN')")
     public FlightResponse getFlight(@PathVariable Long id) {
         return flightService.findById(id);
     }
 
     @GetMapping("/sorted")
-    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'BI_SPECIALIST', 'ADMIN')")
     public List<FlightResponse> getSortedFlights(
             @RequestParam(defaultValue = "50") @Max(200) int limit) {
         return flightService.getFlightsSortedByDeparture(limit);
@@ -64,26 +65,28 @@ public class FlightController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OPERATION_OFFICER')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'ADMIN')")
     public FlightResponse createFlight(@Valid @RequestBody CreateFlightRequest request) {
         return flightService.create(request);
     }
 
     @PostMapping(value = "/bulk", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('OPERATION_OFFICER')")
-    public BulkUploadResult bulkUpload(@RequestParam("file") MultipartFile file) throws IOException {
-        return flightCsvService.upload(file);
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'ADMIN')")
+    public ResponseEntity<BulkUploadJobResponse> bulkUpload(@RequestParam("file") MultipartFile file)
+            throws IOException {
+        String jobId = flightCsvService.submitBulkUpload(file);
+        return ResponseEntity.accepted().body(new BulkUploadJobResponse(jobId));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OPERATION_OFFICER')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'ADMIN')")
     public FlightResponse updateFlight(@PathVariable Long id,
                                        @Valid @RequestBody UpdateFlightRequest request) {
         return flightService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('OPERATION_OFFICER')")
+    @PreAuthorize("hasAnyRole('OPERATION_OFFICER', 'ADMIN')")
     public ResponseEntity<Void> deleteFlight(@PathVariable Long id) {
         flightService.delete(id);
         return ResponseEntity.noContent().build();

@@ -36,26 +36,12 @@ public class HttpReferenceManagerClient implements ReferenceManagerClient {
         return get("/api/reference/stations/by-code/{icao}", StationDto.class, icao);
     }
 
+    // FIX: DEF-009 — getRoute artık ortak get() helper'ını kullanır; query params path placeholder olarak geçilir.
+    // Spring RestClient uri(template, vars...) query string placeholder'larını da destekler.
     @Override
     public Optional<RouteDto> getRoute(String originIcao, String destinationIcao) {
-        try {
-            RouteDto dto = referenceManagerRestClient.get()
-                    .uri("/api/reference/routes/by-codes?origin={o}&destination={d}", originIcao, destinationIcao)
-                    .retrieve()
-                    .body(RouteDto.class);
-            return Optional.ofNullable(dto);
-        } catch (HttpClientErrorException.NotFound e) {
-            return Optional.empty();
-        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
-            log.error("Reference Manager auth hatası (route {}-{}): status={}", originIcao, destinationIcao, e.getStatusCode());
-            throw new ServiceUnavailableException("Reference Manager kimlik doğrulama hatası: " + e.getStatusCode());
-        } catch (HttpClientErrorException e) {
-            log.error("Reference Manager istemci hatası (route {}-{}): status={}", originIcao, destinationIcao, e.getStatusCode());
-            throw new ServiceUnavailableException("Reference Manager hata döndürdü: " + e.getStatusCode());
-        } catch (RestClientException e) {
-            log.error("Reference Manager erişilemez (route {}-{}): {}", originIcao, destinationIcao, e.getMessage());
-            throw new ServiceUnavailableException("Reference Manager erişilemez: " + e.getMessage());
-        }
+        return get("/api/reference/routes/by-codes?origin={o}&destination={d}",
+                RouteDto.class, originIcao, destinationIcao);
     }
 
     private <T> Optional<T> get(String uriTemplate, Class<T> responseType, Object... uriVars) {

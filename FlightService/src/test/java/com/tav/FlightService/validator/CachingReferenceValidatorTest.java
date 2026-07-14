@@ -10,7 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,7 +31,6 @@ class CachingReferenceValidatorTest {
     @Mock ValueOperations<String, String> valueOperations;
     @Mock ReferenceManagerClient referenceManagerClient;
 
-    @InjectMocks
     CachingReferenceValidator validator;
 
     private AutoCloseable closeable;
@@ -40,6 +38,7 @@ class CachingReferenceValidatorTest {
     @BeforeEach
     void setUp() {
         closeable = MockitoAnnotations.openMocks(this);
+        validator = new CachingReferenceValidator(stringRedisTemplate, referenceManagerClient, 300);
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
